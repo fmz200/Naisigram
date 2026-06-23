@@ -29,6 +29,9 @@ objc_library(
         "PublicHeaders/**/*.h",
     ]),
     copts = [
+        "-Wno-enum-float-conversion",
+        "-Wno-misleading-indentation",
+        "-Wno-enum-enum-conversion",
         "-Werror",
     ],
     includes = [

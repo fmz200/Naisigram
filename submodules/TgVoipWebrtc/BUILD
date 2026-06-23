@@ -139,7 +139,7 @@ objc_library(
     name = "TgVoipWebrtc",
     enable_modules = True,
     module_name = "TgVoipWebrtc",
-    srcs = sources,
+    srcs = [],
     hdrs = glob([
         "PublicHeaders/**/*.h",
     ]),
@@ -168,17 +168,7 @@ objc_library(
         "PublicHeaders",
     ],
     deps = [
-        "//third-party/webrtc",
-        "//third-party/webrtc:webrtc_objc",
         "//submodules/MtProtoKit:MtProtoKit",
-        "//third-party/boringssl:crypto",
-        "//third-party/boringssl:ssl",
-        "//third-party/ogg:ogg",
-        "//third-party/opusfile:opusfile",
-        "//submodules/ffmpeg:ffmpeg",
-        "//third-party/rnnoise:rnnoise",
-        "//third-party/libyuv",
-        "//third-party/td:TdBinding",
     ],
     sdk_frameworks = [
         "Foundation",

@@ -1,13 +1,13 @@
 {
-	"bundle_id": "org.{! a random string !}.Telegram",
-	"api_id": "{! get one at https://my.telegram.org/apps !}",
-	"api_hash": "{! get one at https://my.telegram.org/apps !}",
-	"team_id": "{! check README.md !}",
+	"bundle_id": "com.vime50.Naisigram",
+	"api_id": "0",
+	"api_hash": "",
+	"team_id": "GJQ8697Z8G",
 	"app_center_id": "0",
 	"is_internal_build": "true",
 	"is_appstore_build": "false",
 	"appstore_id": "0",
-	"app_specific_url_scheme": "tg",
+	"app_specific_url_scheme": "naisigram",
 	"premium_iap_product_id": "",
 	"enable_siri": false,
 	"enable_icloud": false

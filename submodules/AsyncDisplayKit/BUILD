@@ -15,9 +15,12 @@ objc_library(
         "Source/**/*.mm",
     ], allow_empty=True) + private_headers,
     copts = [
+        "-Wno-reorder-init-list",
+        "-Wno-thread-safety-analysis",
         "-Werror",
     ],
     cxxopts = [
+        "-Wno-thread-safety-analysis",
         "-Werror",
         "-std=c++17",
     ],

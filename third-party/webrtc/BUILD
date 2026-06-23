@@ -3105,6 +3105,7 @@ objc_library(
         "webrtc/rtc_base/system/gcd_helpers.m",
     ],
     copts = [
+        "-Wno-lifetimebound",
         "-w",
         "-Ithird-party/webrtc/webrtc/",
         "-Ithird-party/webrtc/webrtc/sdk/objc",
@@ -3169,6 +3170,7 @@ cc_library(
         "//conditions:default": combined_objcpp_sources + apple_only_cpp_sources,
     }),
     copts = [
+        "-Wno-lifetimebound",
         "-w",
         "-include", "stdint.h",
         "-Ithird-party/webrtc/libsrtp/third_party/libsrtp/include",

@@ -1,3 +1,4 @@
+import Postbox
 import TelegramCore
 import TelegramPresentationData
 import MergeLists
@@ -17,11 +18,10 @@ public struct ChatMessageEntryAttributes: Equatable {
     public var updatingMedia: ChatUpdatingMessageMedia?
     public var isPlaying: Bool
     public var isCentered: Bool
-    public var authorStoryStats: EnginePeerStoryStats?
+    public var authorStoryStats: PeerStoryStats?
     public var displayContinueThreadFooter: Bool
-    public var pinToTop: Bool
     
-    public init(rank: CachedChannelAdminRank?, isContact: Bool, contentTypeHint: ChatMessageEntryContentType, updatingMedia: ChatUpdatingMessageMedia?, isPlaying: Bool, isCentered: Bool, authorStoryStats: EnginePeerStoryStats?, displayContinueThreadFooter: Bool, pinToTop: Bool) {
+    public init(rank: CachedChannelAdminRank?, isContact: Bool, contentTypeHint: ChatMessageEntryContentType, updatingMedia: ChatUpdatingMessageMedia?, isPlaying: Bool, isCentered: Bool, authorStoryStats: PeerStoryStats?, displayContinueThreadFooter: Bool) {
         self.rank = rank
         self.isContact = isContact
         self.contentTypeHint = contentTypeHint
@@ -30,7 +30,6 @@ public struct ChatMessageEntryAttributes: Equatable {
         self.isCentered = isCentered
         self.authorStoryStats = authorStoryStats
         self.displayContinueThreadFooter = displayContinueThreadFooter
-        self.pinToTop = pinToTop
     }
     
     public init() {
@@ -42,73 +41,77 @@ public struct ChatMessageEntryAttributes: Equatable {
         self.isCentered = false
         self.authorStoryStats = nil
         self.displayContinueThreadFooter = false
-        self.pinToTop = false
     }
 }
 
 public enum ChatInfoData: Equatable {
-    case botInfo(title: String, text: String, photo: TelegramMediaImage?, video: TelegramMediaFile?, peer: EnginePeer?, managedByBot: EnginePeer?)
+    case botInfo(title: String, text: String, photo: TelegramMediaImage?, video: TelegramMediaFile?)
     case userInfo(peer: EnginePeer, verification: PeerVerification?, registrationDate: String?, phoneCountry: String?, groupsInCommonCount: Int32)
     case newThreadInfo
 }
 
 public enum ChatHistoryEntry: Identifiable, Comparable {
-    case MessageEntry(EngineRawMessage, ChatPresentationData, Bool, EngineMessageHistoryEntryLocation?, ChatHistoryMessageSelection, ChatMessageEntryAttributes)
-    case MessageGroupEntry(Int64, [(EngineRawMessage, Bool, ChatHistoryMessageSelection, ChatMessageEntryAttributes, EngineMessageHistoryEntryLocation?)], ChatPresentationData)
-    case UnreadEntry(EngineMessage.Index, ChatPresentationData)
-    case ReplyCountEntry(EngineMessage.Index, Bool, Int, ChatPresentationData)
+    case MessageEntry(Message, ChatPresentationData, Bool, MessageHistoryEntryLocation?, ChatHistoryMessageSelection, ChatMessageEntryAttributes)
+    case MessageGroupEntry(Int64, [(Message, Bool, ChatHistoryMessageSelection, ChatMessageEntryAttributes, MessageHistoryEntryLocation?)], ChatPresentationData)
+    case UnreadEntry(MessageIndex, ChatPresentationData)
+    case ReplyCountEntry(MessageIndex, Bool, Int, ChatPresentationData)
     case ChatInfoEntry(ChatInfoData, ChatPresentationData)
+    case SearchEntry(PresentationTheme, PresentationStrings)
+    case AdFoldedEntry(Int, MessageIndex, ChatPresentationData, Bool)
     
     public var stableId: UInt64 {
         switch self {
-        case let .MessageEntry(message, _, _, _, _, attributes):
-            let type: UInt64
-            switch attributes.contentTypeHint {
-            case .generic:
-                type = 2
-            case .largeEmoji:
-                type = 3
-            case .animatedEmoji:
-                type = 4
-            }
-            return UInt64(message.stableId) | ((type << 40))
-        case let .MessageGroupEntry(groupInfo, _, _):
-            return UInt64(bitPattern: groupInfo) | ((UInt64(2) << 40))
-        case .UnreadEntry:
-            return UInt64(4) << 40
-        case .ReplyCountEntry:
-            return UInt64(5) << 40
-        case let .ChatInfoEntry(infoData, _):
-            switch infoData {
-            case .newThreadInfo:
-                return UInt64(7) << 40
-            default:
+            case let .MessageEntry(message, _, _, _, _, attributes):
+                let type: UInt64
+                switch attributes.contentTypeHint {
+                    case .generic:
+                        type = 2
+                    case .largeEmoji:
+                        type = 3
+                    case .animatedEmoji:
+                        type = 4
+                }
+                return UInt64(message.stableId) | ((type << 40))
+            case let .MessageGroupEntry(groupInfo, _, _):
+                return UInt64(bitPattern: groupInfo) | ((UInt64(2) << 40))
+            case .UnreadEntry:
+                return UInt64(4) << 40
+            case .ReplyCountEntry:
+                return UInt64(5) << 40
+            case .ChatInfoEntry:
                 return UInt64(6) << 40
-            }   
+            case .SearchEntry:
+                return UInt64(7) << 40
+            case let .AdFoldedEntry(count, index, _, _):
+                return (UInt64(bitPattern: Int64(index.id.id)) & 0xffffffff) | (UInt64(8) << 40) | UInt64(count)
         }
     }
     
-    public var index: EngineMessage.Index {
+    public var index: MessageIndex {
         switch self {
-        case let .MessageEntry(message, _, _, _, _, _):
-            return message.index
-        case let .MessageGroupEntry(_, messages, _):
-            return messages[messages.count - 1].0.index
-        case let .UnreadEntry(index, _):
-            return index
-        case let .ReplyCountEntry(index, _, _, _):
-            return index
-        case let .ChatInfoEntry(infoData, _):
-            switch infoData {
-            case .newThreadInfo:
-                return EngineMessage.Index.absoluteUpperBound()
-            default:
-                return EngineMessage.Index.absoluteLowerBound()
-            }
+            case let .MessageEntry(message, _, _, _, _, _):
+                return message.index
+            case let .MessageGroupEntry(_, messages, _):
+                return messages[messages.count - 1].0.index
+            case let .UnreadEntry(index, _):
+                return index
+            case let .ReplyCountEntry(index, _, _, _):
+                return index
+            case let .ChatInfoEntry(infoData, _):
+                switch infoData {
+                case .newThreadInfo:
+                    return MessageIndex.absoluteUpperBound()
+                default:
+                    return MessageIndex.absoluteLowerBound()
+                }
+            case .SearchEntry:
+                return MessageIndex.absoluteLowerBound()
+            case let .AdFoldedEntry(_, index, _, _):
+                return index
         }
     }
     
-    public var firstIndex: EngineMessage.Index {
+    public var firstIndex: MessageIndex {
         switch self {
             case let .MessageEntry(message, _, _, _, _, _):
                 return message.index
@@ -121,19 +124,25 @@ public enum ChatHistoryEntry: Identifiable, Comparable {
             case let .ChatInfoEntry(infoData, _):
                 switch infoData {
                 case .newThreadInfo:
-                    return EngineMessage.Index.absoluteUpperBound()
+                    return MessageIndex.absoluteUpperBound()
                 default:
-                    return EngineMessage.Index.absoluteLowerBound()
+                    return MessageIndex.absoluteLowerBound()
                 }
+            case .SearchEntry:
+                return MessageIndex.absoluteLowerBound()
+            case let .AdFoldedEntry(_, index, _, _):
+                return index
         }
     }
-    
+
     public var timestamp: Int32? {
         switch self {
         case let .MessageEntry(message, _, _, _, _, _):
             return message.timestamp
         case let .MessageGroupEntry(_, messages, _):
             return messages[0].0.timestamp
+        case let .AdFoldedEntry(_, index, _, _):
+            return index.timestamp
         default:
             return nil
         }
@@ -293,6 +302,18 @@ public enum ChatHistoryEntry: Identifiable, Comparable {
                 }
             case let .ChatInfoEntry(lhsData, lhsPresentationData):
                 if case let .ChatInfoEntry(rhsData, rhsPresentationData) = rhs, lhsData == rhsData, lhsPresentationData === rhsPresentationData {
+                    return true
+                } else {
+                    return false
+                }
+            case let .SearchEntry(lhsTheme, lhsStrings):
+                if case let .SearchEntry(rhsTheme, rhsStrings) = rhs, lhsTheme === rhsTheme, lhsStrings === rhsStrings {
+                    return true
+                } else {
+                    return false
+                }
+            case let .AdFoldedEntry(lhsCount, lhsIndex, lhsPresentationData, lhsIsExpanded):
+                if case let .AdFoldedEntry(rhsCount, rhsIndex, rhsPresentationData, rhsIsExpanded) = rhs, lhsCount == rhsCount, lhsIndex == rhsIndex, lhsPresentationData === rhsPresentationData, lhsIsExpanded == rhsIsExpanded {
                     return true
                 } else {
                     return false
