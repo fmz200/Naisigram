@@ -16,6 +16,7 @@ import WebUI
 import AvatarNode
 import PeerNameColorItem
 import BoostLevelIconComponent
+import AdFilterStore
 
 private let enabledPublicBioEntities: EnabledEntityTypes = [.allUrl, .mention, .hashtag]
 private let enabledPrivateBioEntities: EnabledEntityTypes = [.internalUrl, .mention, .hashtag]
@@ -1226,6 +1227,20 @@ func editingItems(data: PeerInfoScreenData?, boostStatus: ChannelBoostStatus?, s
                             interaction.openChat(peerId)
                         }))
                     }
+                }
+
+                // Ad Filter button - available to all users regardless of role
+                do {
+                    let ruleCount = AdFilterStore.shared.getRulesForPeer(channel.id.toInt64()).count
+                    let label: String
+                    if ruleCount > 0 {
+                        label = "\(ruleCount)"
+                    } else {
+                        label = ""
+                    }
+                    items[.peerSettings]!.append(PeerInfoScreenDisclosureItem(id: 99, label: .text(label), text: "Ad Filter", icon: PresentationResourcesSettings.dataAndStorage, action: {
+                        interaction.openAdFilterSettings()
+                    }))
                 }
                 
                 var canEditMembers = false

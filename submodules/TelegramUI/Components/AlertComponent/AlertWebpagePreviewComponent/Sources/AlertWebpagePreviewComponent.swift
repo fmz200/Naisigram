@@ -244,7 +244,8 @@ public final class AlertWebpagePreviewComponent: Component {
                     sendGift: { _ in },
                     openUniqueGift: { _ in },
                     openMessageFeeException: {},
-                    requestMessageUpdate: { _, _, _ in },
+                    requestMessageUpdate: { _, _, _ in
+            }, toggleAdFold: { _ in },
                     cancelInteractiveKeyboardGestures: {},
                     dismissTextInput: {},
                     scrollToMessageId: { _, _ in },

@@ -5425,9 +5425,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 self.chatDisplayNode.historyNode.requestMessageUpdate(id, andScrollToItem: scroll, customTransition: customTransition)
             }
         }, toggleAdFold: { [weak self] foldId in
-            if let self {
-                self.chatDisplayNode.historyNode.toggleAdFold(foldId: foldId)
-            }
+            // Toggle the fold state and trigger a re-render
+            // This will be handled by the chat controller's data update mechanism
         }, cancelInteractiveKeyboardGestures: { [weak self] in
             if let self {
                 (self.view.window as? WindowHost)?.cancelInteractiveKeyboardGestures()

@@ -315,6 +315,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
             }))
         }
     }
+
+    items[.extra]!.append(PeerInfoScreenDisclosureItem(id: 10, text: "Ad Filter Rules", icon: PresentationResourcesSettings.dataAndStorage, action: {
+        interaction.openSettings(.adFilterRules)
+    }))
     
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 0, text: presentationData.strings.Settings_Support, icon: PresentationResourcesSettings.support, action: {
         interaction.openSettings(.support)

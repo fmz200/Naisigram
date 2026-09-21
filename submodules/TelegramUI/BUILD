@@ -70,6 +70,7 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/MediaPlayer:UniversalMediaPlayer",
         "//submodules/TelegramVoip:TelegramVoip",
+        "//submodules/TgVoipWebrtc:TgVoipWebrtc",
         "//submodules/DeviceAccess:DeviceAccess",
         "//submodules/Utils/DeviceModel",
         "//submodules/BuildConfig:BuildConfig",

@@ -9,6 +9,7 @@ swift_library(
     copts = [
         "-warnings-as-errors",
     ],
+    alwayslink = True,
     visibility = [
         "//visibility:public",
     ],

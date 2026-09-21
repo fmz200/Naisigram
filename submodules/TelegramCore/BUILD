@@ -7,8 +7,9 @@ swift_library(
         "Sources/**/*.swift",
     ]),
     copts = [
-        
+
     ],
+    alwayslink = True,
     deps = [
         "//submodules/TelegramApi:TelegramApi",
         "//submodules/MtProtoKit:MtProtoKit",

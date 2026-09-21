@@ -15,6 +15,7 @@ import TelegramPresentationData
 import PresentationDataUtils
 import PasswordSetupUI
 import InstantPageCache
+import AdFilterStore
 
 extension PeerInfoScreenNode {
     func openSettings(section: PeerInfoSettingsSection) {
@@ -171,6 +172,8 @@ extension PeerInfoScreenNode {
             self.controller?.push(SecureIdAuthController(context: self.context, mode: .list))
         case .watch:
             push(watchSettingsController(context: self.context))
+        case .adFilterRules:
+            push(AdFilterSettingsController(context: self.context, peerId: nil as EnginePeer.Id?, peerTitle: "All Channels", isGlobalMode: true))
         case .support:
             let supportPeer = Promise<EnginePeer.Id?>()
             supportPeer.set(context.engine.peers.supportPeerId())

@@ -48,6 +48,7 @@ final class PeerInfoInteraction {
     let requestLayout: (Bool) -> Void
     let openEncryptionKey: () -> Void
     let openSettings: (PeerInfoSettingsSection) -> Void
+    let openAdFilterSettings: () -> Void
     let openPaymentMethod: () -> Void
     let switchToAccount: (AccountRecordId) -> Void
     let logoutAccount: (AccountRecordId) -> Void
@@ -126,6 +127,7 @@ final class PeerInfoInteraction {
         requestLayout: @escaping (Bool) -> Void,
         openEncryptionKey: @escaping () -> Void,
         openSettings: @escaping (PeerInfoSettingsSection) -> Void,
+        openAdFilterSettings: @escaping () -> Void,
         openPaymentMethod: @escaping () -> Void,
         switchToAccount: @escaping (AccountRecordId) -> Void,
         logoutAccount: @escaping (AccountRecordId) -> Void,
@@ -203,6 +205,7 @@ final class PeerInfoInteraction {
         self.requestLayout = requestLayout
         self.openEncryptionKey = openEncryptionKey
         self.openSettings = openSettings
+        self.openAdFilterSettings = openAdFilterSettings
         self.openPaymentMethod = openPaymentMethod
         self.switchToAccount = switchToAccount
         self.logoutAccount = logoutAccount

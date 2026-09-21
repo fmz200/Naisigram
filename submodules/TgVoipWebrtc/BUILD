@@ -48,6 +48,7 @@ sources = glob([
     "tgcalls/tgcalls/platform/darwin/TGCMIOCapturer.*",
     "tgcalls/tgcalls/platform/darwin/VideoCMIOCapture.*",
     "tgcalls/tgcalls/desktop_capturer/**",
+    "**/version",
 ])
 
 sources = glob([
@@ -84,6 +85,7 @@ sources = glob([
     "tgcalls/tgcalls/platform/darwin/TGCMIOCapturer.*",
     "tgcalls/tgcalls/platform/darwin/VideoCMIOCapture.*",
     "tgcalls/tgcalls/desktop_capturer/**",
+    "**/version",
 ]) + [
     "tgcalls/tgcalls/Manager.cpp",
     "tgcalls/tgcalls/MediaManager.cpp",
@@ -139,7 +141,8 @@ objc_library(
     name = "TgVoipWebrtc",
     enable_modules = True,
     module_name = "TgVoipWebrtc",
-    srcs = [],
+    srcs = sources,
+    alwayslink = True,
     hdrs = glob([
         "PublicHeaders/**/*.h",
     ]),
@@ -152,9 +155,15 @@ objc_library(
         "-Ithird-party/webrtc/webrtc/sdk/objc/components/renderer/metal",
         "-Ithird-party/webrtc/webrtc/sdk/objc/components/renderer/opengl",
         "-Ithird-party/webrtc/webrtc/sdk/objc/components/video_codec",
+        "-Ithird-party/libyuv/third_party/libyuv",
+        "-Ithird-party/libyuv/third_party/libyuv/include",
         "-Ithird-party/libyuv",
         "-Ithird-party/webrtc/webrtc/sdk/objc/api/video_codec",
         "-Ithird-party/webrtc/absl",
+        "-I/Users/king/Project-Swift/Naisigram/submodules/ffmpeg/Public",
+        "-I{}/Sources".format(package_name()),
+        "-I/Users/king/Project-Swift/Naisigram/third-party/rnnoise/PublicHeaders",
+        "-I/Users/king/Project-Swift/Naisigram/third-party/boringssl/src/include",
         "-DWEBRTC_IOS",
         "-DWEBRTC_MAC",
         "-DWEBRTC_POSIX",
@@ -169,6 +178,12 @@ objc_library(
     ],
     deps = [
         "//submodules/MtProtoKit:MtProtoKit",
+        "//third-party/webrtc",
+        "//third-party/webrtc:webrtc_objc",
+        "//third-party/rnnoise",
+        "//third-party/boringssl:bssl",
+        "//submodules/ffmpeg",
+        ":tgcalls_core",
     ],
     sdk_frameworks = [
         "Foundation",
@@ -262,6 +277,8 @@ cc_library(
         "-Ithird-party/webrtc/webrtc",
         "-Ithird-party/webrtc/dependencies",
         "-Ithird-party/webrtc/absl",
+        "-Ithird-party/libyuv/third_party/libyuv",
+        "-Ithird-party/libyuv/third_party/libyuv/include",
         "-Ithird-party/libyuv",
         "-DRTC_ENABLE_VP9",
         "-DTGVOIP_NAMESPACE=tgvoip_webrtc",

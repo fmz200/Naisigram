@@ -12,12 +12,21 @@ import TextFormat
 import Markdown
 import Display
 import TelegramStringFormatting
+import AdFilterStore
 
 struct ChatHistoryEntriesForViewState {
     private var messageStableIdToLocalId: [UInt32: Int64] = [:]
     var expandedAdFoldIds: Set<Int32> = Set()
 
     init() {
+    }
+
+    mutating func toggleAdFoldExpanded(foldId: Int32) {
+        if expandedAdFoldIds.contains(foldId) {
+            expandedAdFoldIds.remove(foldId)
+        } else {
+            expandedAdFoldIds.insert(foldId)
+        }
     }
 
     mutating func messageGroupStableId(messageStableId: UInt32, groupId: Int64, isLocal: Bool) -> Int64 {
@@ -32,25 +41,17 @@ struct ChatHistoryEntriesForViewState {
             }
         }
     }
-
-    mutating func toggleAdFoldExpanded(foldId: Int32) {
-        if self.expandedAdFoldIds.contains(foldId) {
-            self.expandedAdFoldIds.remove(foldId)
-        } else {
-            self.expandedAdFoldIds.insert(foldId)
-        }
-    }
 }
 
 func chatHistoryEntriesForView(
     currentState: ChatHistoryEntriesForViewState,
     context: AccountContext,
     location: ChatLocation,
+    subject: ChatControllerSubject?,
     view: MessageHistoryView,
     includeUnreadEntry: Bool,
     includeEmptyEntry: Bool,
     includeChatInfoEntry: Bool,
-    includeSearchEntry: Bool,
     includeEmbeddedSavedChatInfo: Bool,
     reverse: Bool,
     groupMessages: Bool,
@@ -67,10 +68,22 @@ func chatHistoryEntriesForView(
     customThreadOutgoingReadState: MessageId?,
     cachedData: CachedPeerData?,
     adMessage: Message?,
-    dynamicAdMessages: [Message]
+    dynamicAdMessages: [Message],
+    isMusicPlaylist: Bool,
+    pinToTopStableId: EngineMessage.StableId?
 ) -> ([ChatHistoryEntry], ChatHistoryEntriesForViewState) {
     var currentState = currentState
-    
+
+    // Ad filter: load rules and compile regexes for current peer
+    var adFilterRegexes: [NSRegularExpression] = []
+    var expandedAdFoldIds: Set<Int32> = []
+    if let peerId = location.peerId {
+        adFilterRegexes = AdFilterStore.shared.cachedCompiledRegexesForPeer(peerId.toInt64())
+        expandedAdFoldIds = currentState.expandedAdFoldIds
+    }
+    var foldedMessages: [(Message, Bool, MessageHistoryEntryLocation?)] = []
+    var foldedFirstIndex: EngineMessage.Index?
+
     if historyAppearsCleared {
         return ([], currentState)
     }
@@ -78,6 +91,7 @@ func chatHistoryEntriesForView(
     var adminRanks: [PeerId: CachedChannelAdminRank] = [:]
     var stickersEnabled = true
     var chatPeer: Peer?
+    var cachedPeerDataPeers: [PeerId: Peer] = [:]
     if let peerId = location.peerId {
         for additionalEntry in view.additionalData {
             if case let .cacheEntry(id, data) = additionalEntry {
@@ -93,6 +107,21 @@ func chatHistoryEntriesForView(
                         stickersEnabled = false
                     }
                 }
+            } else if case let .cachedPeerData(_, peerData) = additionalEntry {
+                if let cachedGroupData = peerData as? CachedGroupData, let participants = cachedGroupData.participants {
+                    for participant in participants.participants {
+                        switch participant {
+                        case let .member(_, _, _, rank):
+                            adminRanks[participant.peerId] = .member(rank)
+                        case let .creator(_, rank):
+                            adminRanks[participant.peerId] = .creator(rank)
+                        case let .admin(_, _, _, rank):
+                            adminRanks[participant.peerId] = .admin(rank)
+                        }
+                    }
+                }
+            } else if case let .cachedPeerDataPeers(_, peers) = additionalEntry {
+                cachedPeerDataPeers = peers
             }
         }
     }
@@ -131,25 +160,21 @@ func chatHistoryEntriesForView(
         }
     }
     
-    // Ad filter: load rules and compile regexes for current peer (using cache)
-    var adFilterRegexes: [NSRegularExpression] = []
-    if let peerId = location.peerId {
-        adFilterRegexes = AdFilterStore.shared.cachedCompiledRegexesForPeer(peerId.toInt64())
-    }
-    var foldedMessages: [(Message, Bool, MessageHistoryEntryLocation?)] = []
-    var foldedFirstIndex: MessageIndex?
-    let expandedAdFoldIds = currentState.expandedAdFoldIds
-
     var count = 0
     loop: for entry in view.entries {
         var message = entry.message
         var isRead = entry.isRead
-
+        
+        var pinToTop = false
+        if message.stableId == pinToTopStableId {
+            pinToTop = true
+        }
+        
         if pendingRemovedMessages.contains(message.id) {
             continue
         }
 
-        // Ad filter: check if message text matches any regex
+        // Ad filter: check if message matches any ad filter rule
         if !adFilterRegexes.isEmpty {
             let messageText = message.text
             if !messageText.isEmpty {
@@ -178,7 +203,7 @@ func chatHistoryEntriesForView(
                 }
             } else {
                 // Collapsed: show fold summary
-                entries.append(.AdFoldedEntry(foldedMessages.count, foldIndex, presentationData, false))
+                entries.append(.AdFoldedEntry(count: foldedMessages.count, index: foldIndex, presentationData: presentationData, isExpanded: false))
             }
             foldedMessages.removeAll()
             foldedFirstIndex = nil
@@ -271,11 +296,11 @@ func chatHistoryEntriesForView(
         }
         
         if presentationData.largeEmoji, message.media.isEmpty {
-            if messageIsEligibleForLargeCustomEmoji(message) {
+            if messageIsEligibleForLargeCustomEmoji(EngineMessage(message)) {
                 contentTypeHint = .animatedEmoji
             } else if stickersEnabled && message.text.count == 1, let _ = associatedData.animatedEmojiStickers[message.text.basicEmoji.0], (message.textEntitiesAttribute?.entities.isEmpty ?? true) {
                 contentTypeHint = .animatedEmoji
-            } else if messageIsEligibleForLargeEmoji(message) {
+            } else if messageIsEligibleForLargeEmoji(EngineMessage(message)) {
                 contentTypeHint = .animatedEmoji
             }
         }
@@ -284,7 +309,7 @@ func chatHistoryEntriesForView(
             if let messageGroupingKey = message.groupingKey {
                 let selection: ChatHistoryMessageSelection
                 if let selectedMessages = selectedMessages {
-                    selection = .selectable(selected: selectedMessages.contains(message.id))
+                    selection = .selectable(selected: selectedMessages.contains(message.id), num: nil)
                 } else {
                     selection = .none
                 }
@@ -294,7 +319,7 @@ func chatHistoryEntriesForView(
                     isCentered = link.isCentered
                 }
                 
-                let attributes = ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: isCentered, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false)
+                let attributes = ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: isCentered, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false, pinToTop: pinToTop)
                 
                 let groupStableId = currentState.messageGroupStableId(messageStableId: message.stableId, groupId: messageGroupingKey, isLocal: Namespaces.Message.allLocal.contains(message.id.namespace))
                 var found = false
@@ -330,7 +355,7 @@ func chatHistoryEntriesForView(
             } else {
                 let selection: ChatHistoryMessageSelection
                 if let selectedMessages = selectedMessages {
-                    selection = .selectable(selected: selectedMessages.contains(message.id))
+                    selection = .selectable(selected: selectedMessages.contains(message.id), num: nil)
                 } else {
                     selection = .none
                 }
@@ -340,21 +365,21 @@ func chatHistoryEntriesForView(
                     isCentered = link.isCentered
                 }
                 
-                entries.append(.MessageEntry(message, presentationData, isRead, entry.location, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: isCentered, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false)))
+                entries.append(.MessageEntry(message, presentationData, isRead, entry.location, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: isCentered, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false, pinToTop: pinToTop)))
             }
         } else {
             let selection: ChatHistoryMessageSelection
             if let selectedMessages = selectedMessages {
-                selection = .selectable(selected: selectedMessages.contains(message.id))
+                selection = .selectable(selected: selectedMessages.contains(message.id), num: nil)
             } else {
                 selection = .none
             }
             
-            entries.append(.MessageEntry(message, presentationData, isRead, entry.location, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: false, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false)))
+            entries.append(.MessageEntry(message, presentationData, isRead, entry.location, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: entry.attributes.authorIsContact, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: message.index == associatedData.currentlyPlayingMessageId, isCentered: false, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false, pinToTop: pinToTop)))
         }
     }
 
-    // Insert final fold summary or expanded messages if there are remaining folded messages at the end
+    // Final fold summary if there are remaining folded messages at the end
     if !foldedMessages.isEmpty, let foldIndex = foldedFirstIndex {
         let foldId = foldIndex.id.id
         if expandedAdFoldIds.contains(foldId) {
@@ -363,7 +388,7 @@ func chatHistoryEntriesForView(
                 entries.append(.MessageEntry(foldedMsg, presentationData, foldedRead, foldedLocation, selection, ChatMessageEntryAttributes()))
             }
         } else {
-            entries.append(.AdFoldedEntry(foldedMessages.count, foldIndex, presentationData, false))
+            entries.append(.AdFoldedEntry(count: foldedMessages.count, index: foldIndex, presentationData: presentationData, isExpanded: false))
         }
     }
 
@@ -384,7 +409,7 @@ func chatHistoryEntriesForView(
     }
     
     var addBotForumHeader = false
-    if location.threadId == nil, let user = chatPeer as? TelegramUser, user.isForum, !entries.isEmpty, !view.holeEarlier, !view.isLoading {
+    if location.threadId == nil, let user = chatPeer as? TelegramUser, let botInfo = user.botInfo, botInfo.flags.contains(.hasForum), botInfo.flags.contains(.forumManagedByUser), !entries.isEmpty, !view.holeEarlier, !view.isLoading {
         addBotForumHeader = true
         outer: for i in (0 ..< entries.count).reversed() {
             switch entries[i] {
@@ -398,7 +423,10 @@ func chatHistoryEntriesForView(
                     }
                 }
                 var attributes = attributes
-                attributes.displayContinueThreadFooter = true
+                if let subject, case .pinnedMessages = subject {
+                } else {
+                    attributes.displayContinueThreadFooter = true
+                }
                 entries[i] = .MessageEntry(message, presentationData, isRead, location, selection, attributes)
                 break outer
             default:
@@ -434,7 +462,7 @@ func chatHistoryEntriesForView(
             associatedThreadInfo: nil,
             associatedStories: [:]
         )
-        entries.insert(.MessageEntry(serviceMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)), at: index)
+        entries.insert(.MessageEntry(serviceMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)), at: index)
     }
     
     for i in (0 ..< entries.count).reversed() {
@@ -474,7 +502,7 @@ func chatHistoryEntriesForView(
                 }
             }
             if let insertAtPosition {
-                entries.insert(.MessageEntry(joinMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)), at: insertAtPosition)
+                entries.insert(.MessageEntry(joinMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)), at: insertAtPosition)
             }
         }
     }
@@ -483,6 +511,12 @@ func chatHistoryEntriesForView(
         var i = 0
         let unreadEntry: ChatHistoryEntry = .UnreadEntry(maxReadIndex, presentationData)
         for entry in entries {
+            if case let .MessageGroupEntry(_, messages, _) = entry {
+                if !messages.isEmpty && maxReadIndex >= messages[0].0.index {
+                    i += 1
+                    continue
+                }
+            }
             if entry > unreadEntry {
                 if i != 0 {
                     entries.insert(unreadEntry, at: i)
@@ -494,7 +528,7 @@ func chatHistoryEntriesForView(
     }
     
     var addedThreadHead = false
-    if case let .replyThread(replyThreadMessage) = location, !replyThreadMessage.isForumPost, view.earlierId == nil, !view.holeEarlier, !view.isLoading {
+    if case let .replyThread(replyThreadMessage) = location, !replyThreadMessage.isForumPost, view.earlierId == nil, !view.holeEarlier, !view.isLoading, !isMusicPlaylist {
         loop: for entry in view.additionalData {
             switch entry {
             case let .message(id, messages) where id == replyThreadMessage.effectiveTopId:
@@ -523,11 +557,11 @@ func chatHistoryEntriesForView(
                     
                     var contentTypeHint: ChatMessageEntryContentType = .generic
                     if presentationData.largeEmoji, topMessage.media.isEmpty {
-                        if messageIsEligibleForLargeCustomEmoji(topMessage) {
+                        if messageIsEligibleForLargeCustomEmoji(EngineMessage(topMessage)) {
                             contentTypeHint = .animatedEmoji
                         } else if stickersEnabled && topMessage.text.count == 1, let _ = associatedData.animatedEmojiStickers[topMessage.text.basicEmoji.0] {
                             contentTypeHint = .animatedEmoji
-                        } else if messageIsEligibleForLargeEmoji(topMessage) {
+                        } else if messageIsEligibleForLargeEmoji(EngineMessage(topMessage)) {
                             contentTypeHint = .animatedEmoji
                         }
                     }
@@ -536,12 +570,12 @@ func chatHistoryEntriesForView(
                     if messages.count > 1, let groupingKey = messages[0].groupingKey {
                         var groupMessages: [(Message, Bool, ChatHistoryMessageSelection, ChatMessageEntryAttributes, MessageHistoryEntryLocation?)] = []
                         for message in messages {
-                            groupMessages.append((message, false, .none, ChatMessageEntryAttributes(rank: adminRank, isContact: false, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: false, isCentered: false, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false), nil))
+                            groupMessages.append((message, false, .none, ChatMessageEntryAttributes(rank: adminRank, isContact: false, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[message.id], isPlaying: false, isCentered: false, authorStoryStats: message.author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false, pinToTop: false), nil))
                         }
                         entries.insert(.MessageGroupEntry(groupingKey, groupMessages, presentationData), at: 0)
                     } else {
                         if !hasTopicCreated {
-                            entries.insert(.MessageEntry(messages[0], presentationData, false, nil, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: false, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[messages[0].id], isPlaying: false, isCentered: false, authorStoryStats: messages[0].author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false)), at: 0)
+                            entries.insert(.MessageEntry(messages[0], presentationData, false, nil, selection, ChatMessageEntryAttributes(rank: adminRank, isContact: false, contentTypeHint: contentTypeHint, updatingMedia: updatingMedia[messages[0].id], isPlaying: false, isCentered: false, authorStoryStats: messages[0].author.flatMap { view.peerStoryStats[$0.id] }, displayContinueThreadFooter: false, pinToTop: false)), at: 0)
                         }
                     }
                     
@@ -569,12 +603,19 @@ func chatHistoryEntriesForView(
                 }
             }
             if case let .peer(peerId) = location, peerId.isReplies {
-                entries.insert(.ChatInfoEntry(.botInfo(title: "", text: presentationData.strings.RepliesChat_DescriptionText, photo: nil, video: nil), presentationData), at: 0)
+                entries.insert(.ChatInfoEntry(.botInfo(title: "", text: presentationData.strings.RepliesChat_DescriptionText, photo: nil, video: nil, peer: nil, managedByBot: nil), presentationData), at: 0)
             } else if case let .peer(peerId) = location, peerId.isVerificationCodes {
-                entries.insert(.ChatInfoEntry(.botInfo(title: "", text: presentationData.strings.VerificationCodes_DescriptionText, photo: nil, video: nil), presentationData), at: 0)
+                entries.insert(.ChatInfoEntry(.botInfo(title: "", text: presentationData.strings.VerificationCodes_DescriptionText, photo: nil, video: nil, peer: nil, managedByBot: nil), presentationData), at: 0)
             } else if let cachedPeerData = cachedPeerData as? CachedUserData {
                 if let botInfo = cachedPeerData.botInfo, !botInfo.description.isEmpty {
-                    entries.insert(.ChatInfoEntry(.botInfo(title: presentationData.strings.Bot_DescriptionTitle, text: botInfo.description, photo: botInfo.photo, video: botInfo.video), presentationData), at: 0)
+                    if location.threadId == nil {
+                        if let subject, case .pinnedMessages = subject {
+                        } else {
+                            entries.insert(.ChatInfoEntry(.botInfo(title: presentationData.strings.Bot_DescriptionTitle, text: botInfo.description, photo: botInfo.photo, video: botInfo.video, peer: nil, managedByBot: nil), presentationData), at: 0)
+                        }
+                    }
+                } else if let botManagerId = cachedPeerData.botManagerId, let managedByBot = cachedPeerDataPeers[botManagerId], let peer = chatPeer.flatMap(EnginePeer.init) {
+                    entries.insert(.ChatInfoEntry(.botInfo(title: "", text: "", photo: nil, video: nil, peer: peer, managedByBot: EnginePeer(managedByBot)), presentationData), at: 0)
                 } else if let peerStatusSettings = cachedPeerData.peerStatusSettings, peerStatusSettings.registrationDate != nil || peerStatusSettings.phoneCountry != nil {
                     if peerStatusSettings.flags.contains(.canAddContact) || peerStatusSettings.flags.contains(.canReport) || peerStatusSettings.flags.contains(.canBlock) {
                         
@@ -615,7 +656,7 @@ func chatHistoryEntriesForView(
                                 associatedThreadInfo: nil,
                                 associatedStories: [:]
                             )
-                            entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)), at: 0)
+                            entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)), at: 0)
                         }
                         
                         if let chatPeer, let nameChangeDate = peerStatusSettings.nameChangeDate, nameChangeDate > 0 {
@@ -655,7 +696,7 @@ func chatHistoryEntriesForView(
                                 associatedThreadInfo: nil,
                                 associatedStories: [:]
                             )
-                            entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)), at: 0)
+                            entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)), at: 0)
                         }
 
                         if let peer = chatPeer.flatMap(EnginePeer.init) {
@@ -708,7 +749,7 @@ func chatHistoryEntriesForView(
         if !dynamicAdMessages.isEmpty {
             assert(entries.sorted() == entries)
             for message in dynamicAdMessages {
-                entries.append(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)))
+                entries.append(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)))
             }
             entries.sort()
         }
@@ -743,18 +784,15 @@ func chatHistoryEntriesForView(
                     associatedStories: message.associatedStories
                 )
                 nextAdMessageId += 1
-                entries.append(.MessageEntry(updatedMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)))
-            }
-        }
-    } else if includeSearchEntry {
-        if view.laterId == nil {
-            if !view.entries.isEmpty {
-                entries.append(.SearchEntry(presentationData.theme.theme, presentationData.strings))
+                entries.append(.MessageEntry(updatedMessage, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)))
             }
         }
     }
     if addBotForumHeader {
-        entries.append(.ChatInfoEntry(.newThreadInfo, presentationData))
+        if let subject, case .pinnedMessages = subject {
+        } else {
+            entries.append(.ChatInfoEntry(.newThreadInfo, presentationData))
+        }
     }
     if includeEmbeddedSavedChatInfo, let peerId = location.peerId {
         if !view.isLoading && view.laterId == nil {
@@ -808,7 +846,7 @@ func chatHistoryEntriesForView(
                 associatedThreadInfo: nil,
                 associatedStories: [:]
             )
-            entries.append(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)))
+            entries.append(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)))
         }
     }
     
@@ -865,9 +903,13 @@ func chatHistoryEntriesForView(
                     associatedThreadInfo: nil,
                     associatedStories: [:]
                 )
-                entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false)), at: 0)
+                entries.insert(.MessageEntry(message, presentationData, false, nil, .none, ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)), at: 0)
             }
         }
+    }
+    
+    if isMusicPlaylist && entries.count == 1 {
+        return ([], currentState)
     }
     
     if reverse {
