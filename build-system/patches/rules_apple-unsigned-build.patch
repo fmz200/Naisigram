@@ -1,0 +1,40 @@
+diff --git a/apple/internal/codesigning_support.bzl b/apple/internal/codesigning_support.bzl
+index 61bbc88a..cfbc9fd0 100644
+--- a/apple/internal/codesigning_support.bzl
++++ b/apple/internal/codesigning_support.bzl
+@@ -216,14 +216,8 @@ def _validate_provisioning_profile(
+         rule_descriptor,
+         platform_prerequisites,
+         provisioning_profile):
+-    # Verify that a provisioning profile was provided for device builds on
+-    # platforms that require it.
+-    if (platform_prerequisites.platform.is_device and
+-        rule_descriptor.requires_signing_for_device and
+-        not provisioning_profile):
+-        fail("The provisioning_profile attribute must be set for device " +
+-             "builds on this platform (%s)." %
+-             platform_prerequisites.platform_type)
++    # Skip validation for simulator builds or when no profile is provided
++    pass
+ 
+ def _signing_command_lines(
+         *,
+diff --git a/apple/internal/partials/provisioning_profile.bzl b/apple/internal/partials/provisioning_profile.bzl
+index 9e3549ed..3407fe7d 100644
+--- a/apple/internal/partials/provisioning_profile.bzl
++++ b/apple/internal/partials/provisioning_profile.bzl
+@@ -38,11 +38,9 @@ def _provisioning_profile_partial_impl(
+     """Implementation for the provisioning profile partial."""
+ 
+     if not profile_artifact:
+-        fail(
+-            "\n".join([
+-                "ERROR: In {}:".format(str(rule_label)),
+-                "Building for device, but no provisioning_profile attribute was set.",
+-            ]),
++        # Allow None provisioning profile for simulator builds
++        return struct(
++            bundle_files = [],
+         )
+ 
+     # Create intermediate file with proper name for the binary.

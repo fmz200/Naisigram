@@ -34,6 +34,13 @@ jobs:
           cp -R $GITHUB_WORKSPACE /Users/Shared/
           mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
 
+      - name: Apply local submodule patches
+        run: |
+          set -x
+          cd /Users/Shared/telegram-ios
+          git -C build-system/bazel-rules/rules_apple apply build-system/patches/rules_apple-unsigned-build.patch
+          git -C third-party/webrtc/webrtc apply build-system/patches/webrtc-compat.patch
+
       - name: Cache Bazel disk cache
         uses: actions/cache@v4
         with:
