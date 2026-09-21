@@ -84,3 +84,8 @@ xcode-files
 **/node_modules/
 tools/sim-watcher/dist/
 .mcp.json
+
+# Local build artifacts (not for upstream)
+bazel-*
+.bazelrc.backup
+submodules/ffmpeg/Public/
