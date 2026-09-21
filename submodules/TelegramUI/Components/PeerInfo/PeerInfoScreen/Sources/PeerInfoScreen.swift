@@ -174,6 +174,7 @@ enum PeerInfoSettingsSection {
     case passport
     case watch
     case adFilterRules
+    case naisigram
     case support
     case faq
     case tips

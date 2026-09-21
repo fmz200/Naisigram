@@ -16,6 +16,7 @@ import PresentationDataUtils
 import PasswordSetupUI
 import InstantPageCache
 import AdFilterStore
+import NaisigramSettings
 
 extension PeerInfoScreenNode {
     func openSettings(section: PeerInfoSettingsSection) {
@@ -174,6 +175,8 @@ extension PeerInfoScreenNode {
             push(watchSettingsController(context: self.context))
         case .adFilterRules:
             push(AdFilterSettingsController(context: self.context, peerId: nil as EnginePeer.Id?, peerTitle: "All Channels", isGlobalMode: true))
+        case .naisigram:
+            push(naisigramSettingsController(context: self.context))
         case .support:
             let supportPeer = Promise<EnginePeer.Id?>()
             supportPeer.set(context.engine.peers.supportPeerId())

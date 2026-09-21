@@ -27,9 +27,33 @@ public struct AdFilterPeerConfig: Codable, Equatable {
 
 public struct AdFilterSettings: Codable, Equatable {
     public var configs: [AdFilterPeerConfig]
+    public var isEnabled: Bool
+    public var foldEnabled: Bool
 
-    public init(configs: [AdFilterPeerConfig] = []) {
+    public init(configs: [AdFilterPeerConfig] = [], isEnabled: Bool = true, foldEnabled: Bool = true) {
         self.configs = configs
+        self.isEnabled = isEnabled
+        self.foldEnabled = foldEnabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case configs
+        case isEnabled
+        case foldEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.configs = try container.decodeIfPresent([AdFilterPeerConfig].self, forKey: .configs) ?? []
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.foldEnabled = try container.decodeIfPresent(Bool.self, forKey: .foldEnabled) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.configs, forKey: .configs)
+        try container.encode(self.isEnabled, forKey: .isEnabled)
+        try container.encode(self.foldEnabled, forKey: .foldEnabled)
     }
 
     public func configForPeer(_ peerId: Int64) -> AdFilterPeerConfig? {

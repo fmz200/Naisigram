@@ -78,7 +78,9 @@ func chatHistoryEntriesForView(
     var adFilterRegexes: [NSRegularExpression] = []
     var expandedAdFoldIds: Set<Int32> = []
     if let peerId = location.peerId {
-        adFilterRegexes = AdFilterStore.shared.cachedCompiledRegexesForPeer(peerId.toInt64())
+        if AdFilterStore.shared.currentSettings().isEnabled {
+            adFilterRegexes = AdFilterStore.shared.cachedCompiledRegexesForPeer(peerId.toInt64())
+        }
         expandedAdFoldIds = currentState.expandedAdFoldIds
     }
     var foldedMessages: [(Message, Bool, MessageHistoryEntryLocation?)] = []
@@ -183,9 +185,11 @@ func chatHistoryEntriesForView(
                     return regex.firstMatch(in: messageText, range: textRange) != nil
                 }
                 if isAd {
-                    foldedMessages.append((message, isRead, entry.location))
-                    if foldedFirstIndex == nil {
-                        foldedFirstIndex = entry.index
+                    if AdFilterStore.shared.currentSettings().foldEnabled {
+                        foldedMessages.append((message, isRead, entry.location))
+                        if foldedFirstIndex == nil {
+                            foldedFirstIndex = entry.index
+                        }
                     }
                     continue loop
                 }
