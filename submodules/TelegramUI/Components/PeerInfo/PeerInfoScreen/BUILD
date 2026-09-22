@@ -11,6 +11,7 @@ swift_library(
     ],
     deps = [
         "//submodules/AdFilterStore",
+        "//submodules/NaisigramSettings",
         "//submodules/AccountContext",
         "//submodules/AccountUtils",
         "//submodules/ActionSheetPeerItem",
