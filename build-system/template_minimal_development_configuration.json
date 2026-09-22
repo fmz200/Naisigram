@@ -1,7 +1,7 @@
 {
 	"bundle_id": "com.vime50.Naisigram",
-	"api_id": "0",
-	"api_hash": "",
+	"api_id": "{! get one at https://my.telegram.org/apps !}",
+	"api_hash": "{! get one at https://my.telegram.org/apps !}",
 	"team_id": "GJQ8697Z8G",
 	"app_center_id": "0",
 	"is_internal_build": "true",
