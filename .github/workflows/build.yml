@@ -82,13 +82,18 @@ jobs:
             --buildNumber="$BUILD_NUMBER" \
             --outputBuildArtifactsPath="build/artifacts"
 
+          # Bazel target is still //Telegram:Telegram, so Make.py writes Telegram.ipa.
+          # Rename published artifacts to the fork name.
+          mv build/artifacts/Telegram.ipa build/artifacts/Naisigram.ipa
+          mv build/artifacts/Telegram.DSYMs.zip build/artifacts/Naisigram.DSYMs.zip
+
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Naisigram-${{ env.APP_VERSION }}-${{ env.BUILD_NUMBER }}
           path: |
-            /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-            /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
+            /Users/Shared/telegram-ios/build/artifacts/Naisigram.ipa
+            /Users/Shared/telegram-ios/build/artifacts/Naisigram.DSYMs.zip
           retention-days: 14
 
       - name: Create Release
@@ -100,5 +105,5 @@ jobs:
           gh release create "build-${{ env.BUILD_NUMBER }}" \
             --title "Naisigram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})" \
             --notes "An unsigned (fake-signed) build of Naisigram for iOS/iPadOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }}). Re-sign the IPA with AltStore/Sideloadly/ESign before installing on device." \
-            /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa \
-            /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
+            /Users/Shared/telegram-ios/build/artifacts/Naisigram.ipa \
+            /Users/Shared/telegram-ios/build/artifacts/Naisigram.DSYMs.zip
